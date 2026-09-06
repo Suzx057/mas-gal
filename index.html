@@ -513,6 +513,78 @@
 
         .modal-close:hover { transform: rotate(90deg); }
 
+        /* ============ night sky ============ */
+        .sky {
+            position: fixed; inset: 0; z-index: 63;
+            background:
+                radial-gradient(120% 80% at 50% 108%, rgba(120, 74, 140, 0.45) 0%, rgba(20, 18, 48, 0) 60%),
+                linear-gradient(180deg, #080a1e 0%, #14123a 45%, #241a44 78%, #35204a 100%);
+            opacity: 0; pointer-events: none; transition: opacity 0.55s ease;
+        }
+
+        .sky.open { opacity: 1; pointer-events: auto; }
+
+        .sky canvas {
+            display: block; width: 100%; height: 100%;
+            position: relative; z-index: 1;
+            cursor: grab; touch-action: none;
+        }
+
+        .sky canvas:active { cursor: grabbing; }
+
+        .sky .modal-close {
+            z-index: 2; background: rgba(255, 255, 255, 0.16); color: #fff;
+            backdrop-filter: blur(6px);
+        }
+
+        .sky .modal-close:hover { background: rgba(255, 255, 255, 0.3); }
+
+        .sky-hint {
+            position: absolute; z-index: 2; top: 26px; left: 0; right: 0; text-align: center;
+            font-size: 13px; letter-spacing: 0.3px; color: #c9c6ee;
+            opacity: 0; transition: opacity 1s ease; pointer-events: none;
+        }
+
+        .sky-hint.show { opacity: 0.75; }
+
+        .sky-caption {
+            position: absolute; z-index: 2; left: 0; right: 0; bottom: 98px; text-align: center;
+            font-family: "Caveat", cursive; font-size: clamp(25px, 4.4vw, 40px);
+            color: #ffd9e6; text-shadow: 0 0 22px rgba(255, 143, 171, 0.55);
+            opacity: 0; transform: translateY(16px); pointer-events: none;
+            transition: opacity 1.1s ease, transform 1.1s ease;
+        }
+
+        .sky-caption.show { opacity: 1; transform: none; }
+
+        .sky-wish {
+            position: absolute; z-index: 2; left: 0; right: 0; bottom: 170px; text-align: center;
+            font-family: "Caveat", cursive; font-size: clamp(22px, 3.8vw, 32px);
+            color: #fff4c9; text-shadow: 0 0 20px rgba(243, 201, 105, 0.6);
+            opacity: 0; transform: translateY(10px) scale(0.96); pointer-events: none;
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .sky-wish.show { opacity: 1; transform: none; }
+
+        .sky-wish-btn {
+            position: absolute; z-index: 2; bottom: 34px; left: 50%; transform: translateX(-50%);
+            border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px;
+            padding: 11px 24px; cursor: pointer;
+            font-family: "Quicksand", sans-serif; font-weight: 600; font-size: 14px; color: #fff;
+            background: rgba(255, 255, 255, 0.12); backdrop-filter: blur(8px);
+            box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35);
+            transition: background 0.22s ease, transform 0.22s ease;
+        }
+
+        .sky-wish-btn:hover { background: rgba(255, 255, 255, 0.22); transform: translateX(-50%) translateY(-2px); }
+
+        @media (max-width: 560px) {
+            .sky-caption { bottom: 92px; }
+            .sky-wish { bottom: 158px; }
+            .sky-hint { top: 18px; font-size: 12px; }
+        }
+
         /* ============ 3D bouquet ============ */
         .bouquet {
             position: fixed; inset: 0; z-index: 62;
@@ -672,6 +744,7 @@
         <a href="#gallery">แกลเลอรี่</a>
         <a href="#game">เกมจับคู่ 🎴</a>
         <button id="bouquetBtn">ช่อดอกไม้ 💐</button>
+        <button id="skyBtn">ท้องฟ้ากลางคืน 🌌</button>
     </nav>
 
     <!-- ===== welcome ===== -->
@@ -733,6 +806,16 @@
             <div class="lb-stage" id="lbStage"></div>
             <div class="lb-caption" id="lbCaption"></div>
         </div>
+    </div>
+
+    <!-- ===== night sky ===== -->
+    <div class="sky" id="sky">
+        <canvas id="skyCanvas"></canvas>
+        <div class="sky-hint" id="skyHint">ลากเพื่อหมุนท้องฟ้า · แตะที่ฟ้าเพื่อขอพร · กด Esc เพื่อปิด</div>
+        <div class="sky-wish" id="skyWish"></div>
+        <div class="sky-caption" id="skyCaption">แหงนมองฟ้าทีไร ก็เห็นเธอทุกที ✨</div>
+        <button class="sky-wish-btn" id="skyWishBtn">ขอพรกับดาวตก 🌠</button>
+        <button class="modal-close" id="skyClose">✕</button>
     </div>
 
     <!-- ===== 3D bouquet ===== -->
@@ -1185,7 +1268,7 @@
         }
 
         document.addEventListener("click", (e) => {
-            if (e.target.closest("button, a, .photo-card, .mem-card, .nav, .bouquet")) return;
+            if (e.target.closest("button, a, .photo-card, .mem-card, .nav, .bouquet, .sky")) return;
             burstHearts(e.clientX, e.clientY, 5);
         });
 
@@ -1217,6 +1300,382 @@
             if (isMusicPlaying()) { pauseMusic(); setMusicIcon(false); }
             else playMusic();
         });
+
+        /* ================= night sky — 3D stars and constellations ================= */
+        (function () {
+            const overlay = document.getElementById("sky");
+            const canvas = document.getElementById("skyCanvas");
+            const ctx = canvas.getContext("2d");
+            const capEl = document.getElementById("skyCaption");
+            const hintEl = document.getElementById("skyHint");
+            const wishEl = document.getElementById("skyWish");
+
+            // change these to whatever names you like — any A-Z letters work, ♡ draws a heart
+            const CONSTELLATIONS = [
+                { text: "M♡S", yaw: 0, pitch: 0.3, scale: 25 },
+                { text: "LOVE", yaw: 2.25, pitch: 0.12, scale: 19 },
+                { text: "♡", yaw: -2.2, pitch: 0.36, scale: 46 }
+            ];
+
+            const WISHES = [
+                "ขอให้เราได้อยู่ด้วยกันนานๆ นะ 🤍",
+                "ขอให้เธอมีความสุขทุกวันเลย ✨",
+                "ขอให้เธอฝันดีทุกคืนน้า 🌙",
+                "ขอให้เราได้ไปเที่ยวด้วยกันอีกเยอะๆ 🌍",
+                "ขอให้เธอสุขภาพแข็งแรงนะ 🍀",
+                "ขอให้เรื่องดีๆ วิ่งเข้าหาเธอทุกวัน 🎈",
+                "ขอให้เรายิ้มให้กันได้ตลอดไป 😊",
+                "ขอให้เธอเจอแต่สิ่งที่ทำให้ใจฟู 💫"
+            ];
+
+            const FADE_MS = 1600;    // stars fading in
+            const DRAW_MS = 7000;    // constellation lines drawing themselves
+
+            let stars = [], haze = [], lines = [], cumLen = [], totalLen = 0;
+            let shooting = [], raf = 0, t0 = 0, finished = false;
+            let yaw = 0, pitch = 0.16, dragging = false, moved = 0, lastPt = null;
+            let W = 0, H = 0, F = 520, ox = 0, oy = 0, scale = 1;
+            let nextShoot = 0, wishTimer = 0;
+
+            /* ---------- vector helpers ---------- */
+            const v = (x, y, z) => ({ x, y, z });
+            const add = (a, b) => v(a.x + b.x, a.y + b.y, a.z + b.z);
+            const mul = (a, k) => v(a.x * k, a.y * k, a.z * k);
+            const norm = (a) => { const l = Math.hypot(a.x, a.y, a.z) || 1; return mul(a, 1 / l); };
+            const cross = (a, b) => v(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+            function frame(d) {
+                const up = Math.abs(d.y) > 0.92 ? v(1, 0, 0) : v(0, 1, 0);
+                const u = norm(cross(up, d));
+                return [u, cross(d, u)];
+            }
+
+            /* ---------- a tiny stroke alphabet, drawn on a 6 x 10 grid ---------- */
+            const GLYPH = {
+                A: "0,0 3,10 6,0|1,3.4 5,3.4",
+                B: "0,0 0,10 4,10 5.6,8.4 4,5.6 0,5.6|0,5.6 4.4,5.6 6,3 4,0 0,0",
+                C: "6,8 4,10 2,10 0,7.5 0,2.5 2,0 4,0 6,2",
+                D: "0,0 0,10 3.5,10 6,7 6,3 3.5,0 0,0",
+                E: "6,10 0,10 0,0 6,0|0,5 4.4,5",
+                F: "6,10 0,10 0,0|0,5 4.4,5",
+                G: "6,8 4,10 2,10 0,7.5 0,2.5 2,0 4,0 6,2 6,4.6 3.6,4.6",
+                H: "0,10 0,0|6,10 6,0|0,5 6,5",
+                I: "1,10 5,10|3,10 3,0|1,0 5,0",
+                J: "5,10 5,2.6 3.6,0 1.6,0 0,2",
+                K: "0,10 0,0|6,10 0.6,4.6|2,6 6,0",
+                L: "0,10 0,0 5.6,0",
+                M: "0,0 0,10 3,4 6,10 6,0",
+                N: "0,0 0,10 6,0 6,10",
+                O: "3,10 0.6,8 0,5 0.6,2 3,0 5.4,2 6,5 5.4,8 3,10",
+                P: "0,0 0,10 4,10 6,8 4,5.4 0,5.4",
+                Q: "3,10 0.6,8 0,5 0.6,2 3,0 5.4,2 6,5 5.4,8 3,10|3.6,2.4 6.4,-0.6",
+                R: "0,0 0,10 4,10 6,8 4,5.4 0,5.4|3,5.4 6,0",
+                S: "6,8.6 4,10 1.6,9.6 0.4,7.6 1.6,5.6 4.4,4.6 5.8,2.8 4.6,0.6 2,0 0,1.4",
+                T: "0,10 6,10|3,10 3,0",
+                U: "0,10 0,2.6 2,0 4,0 6,2.6 6,10",
+                V: "0,10 3,0 6,10",
+                W: "0,10 1.5,0 3,7 4.5,0 6,10",
+                X: "0,10 6,0|6,10 0,0",
+                Y: "0,10 3,5 6,10|3,5 3,0",
+                Z: "0,10 6,10 0,0 6,0"
+            };
+
+            function glyphStrokes(ch) {
+                if (ch === "♡") {
+                    const pts = [];
+                    for (let i = 0; i <= 40; i++) {
+                        const t = i / 40 * Math.PI * 2;
+                        const x = 16 * Math.pow(Math.sin(t), 3);
+                        const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+                        pts.push([3 + x * 0.19, 5.2 + y * 0.28]);
+                    }
+                    return [pts];
+                }
+                const g = GLYPH[ch];
+                if (!g) return [];
+                return g.split("|").map((s) => s.trim().split(/\s+/).map((p) => p.split(",").map(Number)));
+            }
+
+            /* ---------- build the sky ---------- */
+            function build() {
+                stars = []; haze = []; lines = [];
+
+                // scattered stars all around us
+                for (let i = 0; i < 1500; i++) {
+                    const a = Math.random() * Math.PI * 2;
+                    const e = Math.asin(Math.random() * 2 - 1);
+                    const r = 560 + Math.random() * 340;
+                    const big = Math.random() < 0.05;
+                    stars.push({
+                        p: v(Math.cos(e) * Math.sin(a) * r, Math.sin(e) * r, Math.cos(e) * Math.cos(a) * r),
+                        r: big ? 1.7 + Math.random() * 1.5 : 0.5 + Math.random() * 1.1,
+                        a: 0.35 + Math.random() * 0.65,
+                        ph: Math.random() * 6.28,
+                        sp: 0.7 + Math.random() * 1.6,
+                        big,
+                        c: ["255,255,255", "214,228,255", "255,238,214"][i % 3]
+                    });
+                }
+
+                // soft milky haze so the sky has some depth
+                for (let i = 0; i < 7; i++) {
+                    const a = i / 7 * Math.PI * 2 + 0.6;
+                    const e = -0.15 + Math.random() * 0.7;
+                    haze.push({
+                        p: v(Math.cos(e) * Math.sin(a) * 700, Math.sin(e) * 700, Math.cos(e) * Math.cos(a) * 700),
+                        r: 150 + Math.random() * 190,
+                        c: ["150,170,255", "220,160,235", "255,190,210"][i % 3]
+                    });
+                }
+
+                // constellations — bright stars joined by lines that draw themselves
+                CONSTELLATIONS.forEach((cn) => {
+                    const d = v(Math.cos(cn.pitch) * Math.sin(cn.yaw), Math.sin(cn.pitch), Math.cos(cn.pitch) * Math.cos(cn.yaw));
+                    const [u, w] = frame(d);
+                    const centre = mul(d, 640);
+                    const chars = [...cn.text];
+                    const span = chars.length * 6 + (chars.length - 1) * 3;
+
+                    chars.forEach((ch, ci) => {
+                        const x0 = -span / 2 + ci * 9;
+                        glyphStrokes(ch).forEach((gs) => {
+                            const pts = gs.map(([gx, gy]) =>
+                                add(centre, add(mul(u, (x0 + gx) * cn.scale), mul(w, (gy - 5) * cn.scale))));
+                            let L = 0;
+                            for (let i = 1; i < pts.length; i++) {
+                                L += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y, pts[i].z - pts[i - 1].z);
+                            }
+                            lines.push({ pts, len: L });
+                            // a bright star sits on every corner of the constellation
+                            pts.forEach((p, i) => {
+                                if (i % 2 && i !== pts.length - 1) return;
+                                stars.push({ p, r: 2.1 + Math.random(), a: 1, ph: Math.random() * 6.28, sp: 1.4, big: true, key: true, c: "255,236,246" });
+                            });
+                        });
+                    });
+                });
+
+                totalLen = 0; cumLen = [];
+                lines.forEach((l) => { cumLen.push(totalLen); totalLen += l.len; });
+            }
+
+            /* ---------- camera ---------- */
+            function resize() {
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                W = overlay.clientWidth; H = overlay.clientHeight;
+                canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ox = W / 2; oy = H / 2;
+                scale = Math.max(0.6, Math.min(Math.min(W, H) / 620, 1.6));
+                F = 520;
+            }
+
+            // camera sits at the centre of the sky looking out along +z
+            function project(p) {
+                const cy = Math.cos(yaw), sy = Math.sin(yaw);
+                const x1 = p.x * cy - p.z * sy;
+                const z1 = p.x * sy + p.z * cy;
+                const cp = Math.cos(pitch), sp = Math.sin(pitch);
+                const y2 = p.y * cp - z1 * sp;
+                const z2 = p.y * sp + z1 * cp;
+                if (z2 < 50) return null;               // behind us
+                const s = F / z2 * scale;
+                return { x: ox + x1 * s, y: oy - y2 * s, s };
+            }
+
+            /* ---------- painting ---------- */
+            function drawHaze() {
+                for (const h of haze) {
+                    const q = project(h.p);
+                    if (!q) continue;
+                    const r = h.r * q.s;
+                    const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, r);
+                    g.addColorStop(0, "rgba(" + h.c + ",0.13)");
+                    g.addColorStop(1, "rgba(" + h.c + ",0)");
+                    ctx.fillStyle = g;
+                    ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+
+            function drawStars(ts, fade) {
+                for (const st of stars) {
+                    const q = project(st.p);
+                    if (!q || q.x < -40 || q.x > W + 40 || q.y < -40 || q.y > H + 40) continue;
+                    const tw = 0.6 + 0.4 * Math.sin(ts / 700 * st.sp + st.ph);
+                    const a = st.a * tw * fade * (st.key ? 1 : 0.92);
+                    const r = Math.max(0.4, st.r * scale * (st.big ? 1 : 0.9));
+
+                    if (st.big) {
+                        const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, r * 5);
+                        g.addColorStop(0, "rgba(" + st.c + "," + (a * 0.5).toFixed(3) + ")");
+                        g.addColorStop(1, "rgba(" + st.c + ",0)");
+                        ctx.fillStyle = g;
+                        ctx.beginPath(); ctx.arc(q.x, q.y, r * 5, 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.fillStyle = "rgba(" + st.c + "," + a.toFixed(3) + ")";
+                    ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+
+            function drawLines(progress) {
+                const target = progress * totalLen;
+                ctx.lineCap = "round"; ctx.lineJoin = "round";
+                for (let i = 0; i < lines.length; i++) {
+                    if (cumLen[i] >= target) break;
+                    const l = lines[i], n = l.pts.length;
+                    const f = Math.min((target - cumLen[i]) / (l.len || 1), 1);
+                    const fi = f * (n - 1), last = Math.floor(fi);
+
+                    ctx.strokeStyle = "rgba(255, 176, 205, 0.85)";
+                    ctx.lineWidth = 1.5 * scale;
+                    ctx.shadowColor = "rgba(255, 143, 171, 0.9)";
+                    ctx.shadowBlur = 10 * scale;
+                    ctx.beginPath();
+                    let started = false, prev = null;
+                    for (let k = 0; k <= last; k++) {
+                        const q = project(l.pts[k]);
+                        if (!q) { started = false; prev = null; continue; }
+                        if (!started) { ctx.moveTo(q.x, q.y); started = true; } else ctx.lineTo(q.x, q.y);
+                        prev = q;
+                    }
+                    const frac = fi - last;
+                    if (frac > 0 && last < n - 1 && prev) {
+                        const b = project(l.pts[last + 1]);
+                        if (b) ctx.lineTo(prev.x + (b.x - prev.x) * frac, prev.y + (b.y - prev.y) * frac);
+                    }
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            /* ---------- shooting stars ---------- */
+            function spawnShootingStar() {
+                const a = Math.random() * Math.PI * 2, e = 0.1 + Math.random() * 0.8;
+                const d = v(Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a));
+                const [tu, tw] = frame(d);
+                const ang = Math.random() * Math.PI * 2;
+                shooting.push({
+                    p: mul(d, 660),
+                    d: add(mul(tu, Math.cos(ang)), mul(tw, Math.sin(ang))),
+                    t: 0, life: 1.15 + Math.random() * 0.5,
+                    len: 140 + Math.random() * 130,
+                    speed: 620 + Math.random() * 380
+                });
+            }
+
+            function drawShooting(dt) {
+                for (let i = shooting.length - 1; i >= 0; i--) {
+                    const s = shooting[i];
+                    s.t += dt;
+                    if (s.t > s.life) { shooting.splice(i, 1); continue; }
+                    const head = add(s.p, mul(s.d, s.speed * s.t));
+                    const tail = add(head, mul(s.d, -s.len));
+                    const a = project(head), b = project(tail);
+                    if (!a || !b) continue;
+                    const k = 1 - s.t / s.life;
+                    const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+                    g.addColorStop(0, "rgba(255,255,255," + (0.95 * k).toFixed(3) + ")");
+                    g.addColorStop(0.4, "rgba(255,214,232," + (0.5 * k).toFixed(3) + ")");
+                    g.addColorStop(1, "rgba(255,214,232,0)");
+                    ctx.strokeStyle = g;
+                    ctx.lineWidth = 2.1 * scale;
+                    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+
+                    const gl = ctx.createRadialGradient(a.x, a.y, 0, a.x, a.y, 9 * scale);
+                    gl.addColorStop(0, "rgba(255,255,255," + (0.9 * k).toFixed(3) + ")");
+                    gl.addColorStop(1, "rgba(255,255,255,0)");
+                    ctx.fillStyle = gl;
+                    ctx.beginPath(); ctx.arc(a.x, a.y, 9 * scale, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+
+            function makeWish() {
+                spawnShootingStar();
+                wishEl.classList.remove("show");
+                void wishEl.offsetWidth;          // restart the fade even if a wish is already up
+                wishEl.textContent = WISHES[Math.floor(Math.random() * WISHES.length)];
+                wishEl.classList.add("show");
+                clearTimeout(wishTimer);
+                wishTimer = setTimeout(() => wishEl.classList.remove("show"), 4200);
+            }
+
+            /* ---------- loop ---------- */
+            let lastTs = 0;
+            function tick(ts) {
+                if (!t0) { t0 = ts; lastTs = ts; nextShoot = ts + 2500; }
+                const dt = Math.min((ts - lastTs) / 1000, 0.05);
+                lastTs = ts;
+
+                const el = ts - t0;
+                const fade = Math.min(el / FADE_MS, 1);
+                const prog = Math.max(0, Math.min((el - FADE_MS) / DRAW_MS, 1));
+                if (!dragging) yaw += 0.00035 + (finished ? 0.00025 : 0);
+
+                ctx.clearRect(0, 0, W, H);
+                drawHaze();
+                drawStars(ts, fade);
+                if (prog > 0) drawLines(prog);
+                if (ts > nextShoot) { spawnShootingStar(); nextShoot = ts + 5000 + Math.random() * 8000; }
+                drawShooting(dt);
+
+                if (prog >= 1 && !finished) {
+                    finished = true;
+                    capEl.classList.add("show");
+                    hintEl.classList.add("show");
+                }
+                raf = requestAnimationFrame(tick);
+            }
+
+            /* ---------- open / close ---------- */
+            function start() {
+                capEl.classList.remove("show");
+                hintEl.classList.remove("show");
+                wishEl.classList.remove("show");
+                shooting = []; finished = false; t0 = 0; yaw = 0; pitch = 0.16;
+                if (!stars.length) build();
+                resize();
+                cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(tick);
+            }
+
+            function openSky() {
+                overlay.classList.add("open");
+                document.body.style.overflow = "hidden";
+                start();
+            }
+
+            function closeSky() {
+                overlay.classList.remove("open");
+                document.body.style.overflow = "";
+                cancelAnimationFrame(raf); raf = 0;
+            }
+
+            document.getElementById("skyBtn").addEventListener("click", openSky);
+            document.getElementById("skyClose").addEventListener("click", closeSky);
+            document.getElementById("skyWishBtn").addEventListener("click", makeWish);
+
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "Escape" && overlay.classList.contains("open")) closeSky();
+            });
+
+            window.addEventListener("resize", () => { if (overlay.classList.contains("open")) resize(); });
+
+            canvas.addEventListener("pointerdown", (e) => {
+                dragging = true; moved = 0; lastPt = { x: e.clientX, y: e.clientY };
+                canvas.setPointerCapture(e.pointerId);
+            });
+            canvas.addEventListener("pointermove", (e) => {
+                if (!dragging) return;
+                const dx = e.clientX - lastPt.x, dy = e.clientY - lastPt.y;
+                moved += Math.abs(dx) + Math.abs(dy);
+                yaw -= dx * 0.004;
+                pitch = Math.max(-0.9, Math.min(1.1, pitch + dy * 0.003));
+                lastPt = { x: e.clientX, y: e.clientY };
+            });
+            ["pointerup", "pointercancel"].forEach((ev) => canvas.addEventListener(ev, () => {
+                if (dragging && moved < 8) makeWish();   // a tap on the sky is a wish
+                dragging = false;
+            }));
+        })();
 
         /* ================= 3D bouquet — drawn stroke by stroke ================= */
         (function () {
