@@ -495,6 +495,78 @@
 
         .modal-close:hover { transform: rotate(90deg); }
 
+        /* ============ 3D bouquet ============ */
+        .bouquet {
+            position: fixed; inset: 0; z-index: 62;
+            background: radial-gradient(62% 58% at 50% 44%, #fffafc 0%, #ffeaf1 46%, #f4e2f3 100%);
+            opacity: 0; pointer-events: none; transition: opacity 0.45s ease;
+        }
+
+        .bouquet.open { opacity: 1; pointer-events: auto; }
+
+        .bouquet canvas {
+            display: block; width: 100%; height: 100%;
+            position: relative; z-index: 1;
+            cursor: grab; touch-action: none;
+        }
+
+        /* emoji drifting up behind the drawing */
+        .bq-emoji {
+            position: absolute; inset: 0; overflow: hidden;
+            pointer-events: none; z-index: 0;
+        }
+
+        .bq-emoji span {
+            position: absolute; bottom: -14%; opacity: 0;
+            animation: bqFloat linear infinite;
+        }
+
+        @keyframes bqFloat {
+            0% { transform: translateY(0) scale(0.85) rotate(0deg); opacity: 0; }
+            14% { opacity: 0.5; }
+            86% { opacity: 0.45; }
+            100% { transform: translateY(-122vh) scale(1.15) rotate(20deg); opacity: 0; }
+        }
+
+        .bouquet canvas:active { cursor: grabbing; }
+
+        .bq-hint {
+            position: absolute; top: 26px; left: 0; right: 0; text-align: center;
+            font-size: 13px; color: var(--ink-soft); letter-spacing: 0.3px;
+            opacity: 0; transition: opacity 0.9s ease; pointer-events: none;
+        }
+
+        .bq-hint.show { opacity: 0.72; }
+
+        .bq-caption {
+            position: absolute; left: 0; right: 0; bottom: 96px; text-align: center;
+            font-family: "Caveat", cursive; font-size: clamp(26px, 4.6vw, 42px);
+            color: var(--pink-deep); text-shadow: 0 2px 16px rgba(255, 255, 255, 0.9);
+            opacity: 0; transform: translateY(16px); pointer-events: none;
+            transition: opacity 0.9s ease, transform 0.9s ease;
+        }
+
+        .bq-caption.show { opacity: 1; transform: none; }
+
+        .bq-replay {
+            position: absolute; bottom: 32px; left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            border: none; border-radius: 999px; padding: 11px 24px; cursor: pointer;
+            font-family: "Quicksand", sans-serif; font-weight: 600; font-size: 14px; color: #fff;
+            background: linear-gradient(135deg, var(--pink), var(--pink-deep));
+            box-shadow: 0 10px 24px rgba(232, 87, 126, 0.35);
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.5s ease, transform 0.5s ease, filter 0.2s ease;
+        }
+
+        .bq-replay.show { opacity: 1; pointer-events: auto; transform: translateX(-50%); }
+        .bq-replay:hover { filter: brightness(1.06); }
+
+        @media (max-width: 560px) {
+            .bq-caption { bottom: 88px; }
+            .bq-hint { top: 18px; font-size: 12px; }
+        }
+
         /* ============ floating controls ============ */
         .now-playing {
             position: fixed; bottom: 24px; left: 22px; z-index: 40;
@@ -540,11 +612,6 @@
         .to-top { bottom: 86px; opacity: 0; pointer-events: none; }
         .to-top.show { opacity: 1; pointer-events: auto; }
 
-        .yt-hidden {
-            position: fixed; width: 1px; height: 1px; bottom: 0; left: 0;
-            opacity: 0.01; pointer-events: none; z-index: -1;
-        }
-
         /* ============ toast ============ */
         .toast {
             position: fixed; left: 50%; bottom: 90px; transform: translate(-50%, 20px);
@@ -583,6 +650,7 @@
         <button class="home-btn" id="homeBtn">🏠 หน้าแรก</button>
         <a href="#gallery">แกลเลอรี่</a>
         <a href="#game">เกมจับคู่ 🎴</a>
+        <button id="bouquetBtn">ช่อดอกไม้ 💐</button>
     </nav>
 
     <!-- ===== welcome ===== -->
@@ -646,6 +714,16 @@
         </div>
     </div>
 
+    <!-- ===== 3D bouquet ===== -->
+    <div class="bouquet" id="bouquet">
+        <div class="bq-emoji" id="bqEmoji"></div>
+        <canvas id="bouquetCanvas"></canvas>
+        <div class="bq-hint" id="bqHint">ลากเพื่อหมุนช่อดอกไม้ได้นะ · กด Esc เพื่อปิด</div>
+        <div class="bq-caption" id="bqCaption">For you น้าา 💐🤍</div>
+        <button class="bq-replay" id="bqReplay">วาดใหม่อีกครั้ง 🖌️</button>
+        <button class="modal-close" id="bouquetClose">✕</button>
+    </div>
+
     <!-- ===== floating controls ===== -->
     <div class="now-playing paused" id="nowPlaying">
         <div class="eq"><span></span><span></span><span></span><span></span></div>
@@ -658,8 +736,8 @@
 
     <audio id="chimeSound" src="https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3"></audio>
 
-    <!-- Background music: Albert Posis - Serendipity (played through YouTube's official embed player) -->
-    <div id="ytPlayer" class="yt-hidden"></div>
+    <!-- Background music: Serendipity (local file) -->
+    <audio id="bgm" src="Serendipity.mp3" loop preload="auto"></audio>
 
     <script>
         /* ================= welcome + typewriter ================= */
@@ -1086,50 +1164,27 @@
         }
 
         document.addEventListener("click", (e) => {
-            if (e.target.closest("button, a, .photo-card, .mem-card, .nav")) return;
+            if (e.target.closest("button, a, .photo-card, .mem-card, .nav, .bouquet")) return;
             burstHearts(e.clientX, e.clientY, 5);
         });
 
-        /* ================= background music (YouTube embed) ================= */
-        const YT_VIDEO_ID = "1ubVAALAldw";   // Albert Posis - Serendipity
+        /* ================= background music (local mp3) ================= */
         const musicToggle = document.getElementById("musicToggle");
         const nowPlaying = document.getElementById("nowPlaying");
         const trackName = document.getElementById("trackName");
-        let ytPlayer = null, ytReady = false, playWhenReady = false;
+        const bgm = document.getElementById("bgm");
 
-        (function loadYouTubeApi() {
-            const tag = document.createElement("script");
-            tag.src = "https://www.youtube.com/iframe_api";
-            document.head.appendChild(tag);
-        })();
-
-        window.onYouTubeIframeAPIReady = function () {
-            ytPlayer = new YT.Player("ytPlayer", {
-                videoId: YT_VIDEO_ID,
-                playerVars: {
-                    autoplay: 0, controls: 0, loop: 1,
-                    playlist: YT_VIDEO_ID,   // required for loop to work
-                    modestbranding: 1, playsinline: 1
-                },
-                events: {
-                    onReady: () => {
-                        ytReady = true;
-                        ytPlayer.setVolume(55);
-                        const data = ytPlayer.getVideoData && ytPlayer.getVideoData();
-                        trackName.textContent = (data && data.title) ? data.title : "Serendipity";
-                        if (playWhenReady) playMusic();
-                    },
-                    onStateChange: (e) => setMusicIcon(e.data === YT.PlayerState.PLAYING)
-                }
-            });
-        };
+        bgm.volume = 0.55;
+        trackName.textContent = "Serendipity";
+        bgm.addEventListener("play", () => setMusicIcon(true));
+        bgm.addEventListener("pause", () => setMusicIcon(false));
 
         function playMusic() {
-            if (!ytReady) { playWhenReady = true; return; }
-            ytPlayer.playVideo();
+            const p = bgm.play();
+            if (p && p.catch) p.catch(() => setMusicIcon(false));   // browser blocked autoplay
         }
-        function pauseMusic() { if (ytReady) ytPlayer.pauseVideo(); }
-        function isMusicPlaying() { return ytReady && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING; }
+        function pauseMusic() { bgm.pause(); }
+        function isMusicPlaying() { return !bgm.paused; }
 
         function setMusicIcon(playing) {
             musicToggle.textContent = playing ? "🔊" : "🔈";
@@ -1141,6 +1196,513 @@
             if (isMusicPlaying()) { pauseMusic(); setMusicIcon(false); }
             else playMusic();
         });
+
+        /* ================= 3D bouquet — drawn stroke by stroke ================= */
+        (function () {
+            const overlay = document.getElementById("bouquet");
+            const canvas = document.getElementById("bouquetCanvas");
+            const ctx = canvas.getContext("2d");
+            const capEl = document.getElementById("bqCaption");
+            const hintEl = document.getElementById("bqHint");
+            const replayBtn = document.getElementById("bqReplay");
+            const emojiLayer = document.getElementById("bqEmoji");
+
+            const DRAW_MS = 9500;          // how long the whole bouquet takes to draw itself
+
+            let strokes = [], cumLen = [], totalLen = 0;
+            let raf = 0, t0 = 0, finished = false, sparkles = [];
+            let yaw = -0.5, pitch = -0.12, dragging = false, lastPt = null;
+            let W = 0, H = 0, viewScale = 1, ox = 0, oy = 0;
+
+            /* ---------- tiny 3D vector helpers ---------- */
+            const v = (x, y, z) => ({ x, y, z });
+            const add = (a, b) => v(a.x + b.x, a.y + b.y, a.z + b.z);
+            const sub = (a, b) => v(a.x - b.x, a.y - b.y, a.z - b.z);
+            const mul = (a, k) => v(a.x * k, a.y * k, a.z * k);
+            const norm = (a) => { const l = Math.hypot(a.x, a.y, a.z) || 1; return mul(a, 1 / l); };
+            const cross = (a, b) => v(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+
+            function bez(p0, p1, p2, p3, t) {
+                const u = 1 - t, A = u * u * u, B = 3 * u * u * t, C = 3 * u * t * t, D = t * t * t;
+                return v(A * p0.x + B * p1.x + C * p2.x + D * p3.x,
+                    A * p0.y + B * p1.y + C * p2.y + D * p3.y,
+                    A * p0.z + B * p1.z + C * p2.z + D * p3.z);
+            }
+
+            // two unit vectors perpendicular to w — the plane a flower head lives in
+            function frame(w) {
+                const up = Math.abs(w.y) > 0.92 ? v(1, 0, 0) : v(0, 1, 0);
+                const u = norm(cross(up, w));
+                return [u, cross(w, u)];
+            }
+
+            // one petal or leaf: pointed at both ends, widest in the middle, curled along `up`
+            function blade(c, axis, wide, up, R, WD, bend, steps) {
+                const pts = [];
+                for (let i = 0; i <= steps; i++) {
+                    const phi = i / steps * Math.PI * 2;
+                    const t = (1 - Math.cos(phi)) / 2;
+                    const off = WD * Math.sin(phi) * Math.pow(t, 0.55) * (1 - t * 0.4);
+                    pts.push(add(add(c, add(mul(axis, R * t), mul(wide, off))), mul(up, bend * t * t)));
+                }
+                return pts;
+            }
+
+            function push(list, pts, color, w) {
+                list.push({ pts, color, w, mid: pts[Math.floor(pts.length / 2)] });
+            }
+
+            /* ---------- build the bouquet in 3D ---------- */
+            function headStrokes(out, tip, dir, col) {
+                const [u0, w0] = frame(dir);
+                const layers = col.type === "rose"
+                    ? [{ n: 8, R: 58, WD: 25, bend: 7, rot: 0, c: col.p, lift: 0 },
+                       { n: 7, R: 44, WD: 19, bend: 13, rot: 0.42, c: col.p, lift: 5 },
+                       { n: 6, R: 31, WD: 14, bend: 19, rot: 0.9, c: col.i, lift: 10 },
+                       { n: 5, R: 19, WD: 9, bend: 23, rot: 1.4, c: col.i, lift: 15 }]
+                    : col.type === "daisy"
+                        ? [{ n: 14, R: 52, WD: 9, bend: 5, rot: 0, c: col.p, lift: 0 },
+                           { n: 10, R: 33, WD: 8, bend: 9, rot: 0.22, c: col.i, lift: 4 }]
+                        : col.type === "mini"
+                            ? [{ n: 6, R: 22, WD: 9, bend: 6, rot: 0, c: col.p, lift: 0 },
+                               { n: 5, R: 14, WD: 6, bend: 9, rot: 0.5, c: col.i, lift: 3 }]
+                            : [{ n: 5, R: 44, WD: 22, bend: 26, rot: 0, c: col.p, lift: 0 },
+                               { n: 4, R: 28, WD: 15, bend: 30, rot: 0.6, c: col.i, lift: 8 }];
+
+                layers.forEach((L) => {
+                    for (let k = 0; k < L.n; k++) {
+                        const ang = k / L.n * Math.PI * 2 + L.rot;
+                        const axis = add(mul(u0, Math.cos(ang)), mul(w0, Math.sin(ang)));
+                        const wide = add(mul(u0, -Math.sin(ang)), mul(w0, Math.cos(ang)));
+                        push(out, blade(add(tip, mul(dir, L.lift)), axis, wide, dir, L.R, L.WD, L.bend, 26), L.c, 1.5);
+                    }
+                });
+
+                // little spiral heart in the middle — roses get a deeper swirl
+                const rose = col.type === "rose", mini = col.type === "mini";
+                const coreR = rose ? 14 : mini ? 5 : 10;
+                const coreLift = rose ? 16 : mini ? 6 : 12;
+                const sp = [];
+                for (let k = 0; k <= 54; k++) {
+                    const t = k / 54, ang = t * Math.PI * (rose ? 6.4 : 5.4), r = coreR * t;
+                    sp.push(add(add(tip, mul(dir, coreLift + 6 * t)),
+                        add(mul(u0, Math.cos(ang) * r), mul(w0, Math.sin(ang) * r))));
+                }
+                push(out, sp, col.core, mini ? 1.2 : 1.6);
+
+                // sepals tucked under the bloom
+                if (rose) {
+                    for (let k = 0; k < 3; k++) {
+                        const ang = k / 3 * Math.PI * 2 + 0.7;
+                        const axis = add(mul(u0, Math.cos(ang)), mul(w0, Math.sin(ang)));
+                        const wide = add(mul(u0, -Math.sin(ang)), mul(w0, Math.cos(ang)));
+                        push(out, blade(add(tip, mul(dir, -9)), axis, wide, dir, 30, 8, -13, 20), "#8cbb85", 1.1);
+                    }
+                }
+            }
+
+            function build() {
+                const wrap = [], stems = [], heads = [], fill = [], bow = [];
+                const base = v(0, -120, 0);
+                const PALETTE = [
+                    { p: "#ff6f93", i: "#e8577e", core: "#f3c969", type: "rose" },
+                    { p: "#e8577e", i: "#c93b64", core: "#ffe9a8", type: "rose" },
+                    { p: "#ffa6c0", i: "#ff8fab", core: "#f3c969", type: "rose" },
+                    { p: "#ffc2d4", i: "#ffa6c0", core: "#f3c969", type: "daisy" },
+                    { p: "#c9a7eb", i: "#b98fe0", core: "#fff0b8", type: "tulip" },
+                    { p: "#ff8fab", i: "#ff6f93", core: "#ffe9a8", type: "rose" },
+                    { p: "#ffd3e0", i: "#ffbcd0", core: "#f3c969", type: "daisy" }
+                ];
+
+                /* wrapping paper — a slim cone of folds plus two rim lines */
+                const apex = v(0, -214, 0), rimY = -66, rimR = 108;
+                const rimAt = (a, r) => v(Math.cos(a) * r, rimY + Math.sin(a * 3) * 6, Math.sin(a) * r * 0.95);
+                for (let k = 0; k < 16; k++) {
+                    const ang = k / 16 * Math.PI * 2;
+                    const rim = rimAt(ang, rimR), fold = [];
+                    // start each fold just off the tip so the bottom reads rounded, not as a sharp V
+                    const foot = add(apex, v(Math.cos(ang) * 11, 0, Math.sin(ang) * 11));
+                    for (let s = 0; s <= 14; s++) {
+                        fold.push(bez(foot, add(foot, v(0, 58, 0)), add(rim, v(0, -58, 0)), rim, s / 14));
+                    }
+                    push(wrap, fold, "#dcb9c9", 1.3);
+                }
+                [rimR, rimR * 0.72].forEach((r, ri) => {
+                    const rimLine = [];
+                    for (let k = 0; k <= 64; k++) rimLine.push(add(rimAt(k / 64 * Math.PI * 2, r), v(0, ri * -18, 0)));
+                    push(wrap, rimLine, ri ? "#e2c6d2" : "#cfa6ba", ri ? 1.2 : 1.5);
+                });
+
+                /* the handle — bands, spiralling paper and a lace edge */
+                const coneR = (y) => rimR * Math.max(0, Math.min(1, (y - apex.y) / (rimY - apex.y)));
+                [-168, -140, -112].forEach((by, bi) => {
+                    const band = [], r = coneR(by);
+                    for (let k = 0; k <= 48; k++) {
+                        const a = k / 48 * Math.PI * 2;
+                        band.push(v(Math.cos(a) * r, by + Math.sin(a * 3) * 2.5, Math.sin(a) * r * 0.95));
+                    }
+                    push(wrap, band, bi === 1 ? "#cfa6ba" : "#e2c6d2", 1.1);
+                });
+                [1, -1].forEach((d) => {
+                    const spiral = [];
+                    for (let k = 0; k <= 70; k++) {
+                        const t = k / 70, y = apex.y + 14 + (rimY - apex.y - 14) * t;
+                        const a = d * t * Math.PI * 2.2 + (d > 0 ? 0.4 : 2.6), r = coneR(y) * 0.99;
+                        spiral.push(v(Math.cos(a) * r, y, Math.sin(a) * r * 0.95));
+                    }
+                    push(wrap, spiral, "#e2c6d2", 1.1);
+                });
+                const lace = [];
+                for (let k = 0; k <= 168; k++) {
+                    const a = k / 168 * Math.PI * 2, sc = Math.abs(Math.sin(a * 9));
+                    const r = rimR * (1.03 + 0.05 * sc);
+                    lace.push(v(Math.cos(a) * r, rimY + 7 + Math.sin(a * 3) * 6 + 5 * sc, Math.sin(a) * r * 0.95));
+                }
+                push(wrap, lace, "#d7aec0", 1.2);
+
+                /* stems, leaves and flower heads */
+                const N = 15;
+                for (let i = 0; i < N; i++) {
+                    const a = i / N * Math.PI * 2 + 0.55;
+                    const ring = i % 3;
+                    const spread = [116, 76, 26][ring] * (0.9 + (i % 2) * 0.16);
+                    const top = [44, 100, 152][ring] + (i % 2 ? 14 : -10);
+                    const tip = v(Math.cos(a) * spread, top, Math.sin(a) * spread * 0.92);
+                    const c1 = add(base, v(Math.cos(a) * spread * 0.12, 70, Math.sin(a) * spread * 0.12));
+                    const c2 = v(Math.cos(a) * spread * 0.95, top - 62, Math.sin(a) * spread * 0.88);
+                    const at = (t) => bez(base, c1, c2, tip, t);
+
+                    const stem = [];
+                    for (let k = 0; k <= 30; k++) stem.push(at(k / 30));
+                    push(stems, stem, "#7fae7a", 1.7);
+
+                    [0.44, 0.66].forEach((tt, li) => {
+                        const p = at(tt);
+                        const along = norm(sub(at(tt + 0.04), p));
+                        const [lu] = frame(along);
+                        const dirL = norm(add(mul(lu, li ? -1 : 1), mul(along, 0.55)));
+                        const [, lw] = frame(dirL);
+                        push(stems, blade(p, dirL, lw, along, 40 - li * 8, 15, 6, 24), "#8cbb85", 1.3);
+                    });
+
+                    const facing = norm(add(norm(sub(tip, at(0.9))), v(0, 0.5, 0)));
+                    headStrokes(heads, tip, facing, PALETTE[i % PALETTE.length]);
+                }
+
+                /* baby's breath — little filler sprigs so the bunch looks full */
+                for (let i = 0; i < 9; i++) {
+                    const a = i / 9 * Math.PI * 2 + 1.9;
+                    const sp = 104 + (i % 3) * 20;
+                    const fTip = v(Math.cos(a) * sp, 74 + (i % 4) * 32, Math.sin(a) * sp * 0.9);
+                    const f1 = add(base, v(0, 66, 0));
+                    const f2 = v(Math.cos(a) * sp * 0.9, fTip.y - 54, Math.sin(a) * sp * 0.85);
+                    const twig = [];
+                    for (let k = 0; k <= 24; k++) twig.push(bez(base, f1, f2, fTip, k / 24));
+                    push(fill, twig, "#a8cfa2", 1);
+
+                    for (let b = 0; b < 4; b++) {
+                        const c = bez(base, f1, f2, fTip, Math.min(0.62 + b * 0.12, 1));
+                        const bud = [];
+                        for (let k = 0; k <= 14; k++) {
+                            const th = k / 14 * Math.PI * 2, r = 5 + (b % 2);
+                            bud.push(v(c.x + Math.cos(th) * r, c.y + Math.sin(th) * r * 0.9, c.z + Math.sin(th) * r * 0.4));
+                        }
+                        push(fill, bud, "#d8bfe0", 1.1);
+                    }
+                }
+
+                /* small blossoms tucked into the wrap, right where you hold it */
+                const MINI = [
+                    { p: "#ffb3c8", i: "#ff8fab", core: "#f3c969", type: "mini" },
+                    { p: "#e8577e", i: "#c93b64", core: "#ffe9a8", type: "mini" },
+                    { p: "#d9bff0", i: "#c9a7eb", core: "#fff0b8", type: "mini" }
+                ];
+                for (let i = 0; i < 7; i++) {
+                    const a = i / 7 * Math.PI * 2 + 0.3;
+                    const yb = -76 + (i % 2) * 12;
+                    const r = coneR(yb) * 1.03;
+                    const c = v(Math.cos(a) * r, yb, Math.sin(a) * r * 0.95);
+                    const face = norm(v(Math.cos(a), 0.8, Math.sin(a)));
+                    headStrokes(fill, c, face, MINI[i % MINI.length]);
+
+                    // a leaf beside each little blossom
+                    const [mu, mw] = frame(face);
+                    push(fill, blade(c, mu, mw, face, 26, 9, 5, 20), "#8cbb85", 1.1);
+                }
+
+                /* a few little hearts tucked in — the flowers of love */
+                for (let i = 0; i < 5; i++) {
+                    const a = i / 5 * Math.PI * 2 + 0.9;
+                    const rr = 132 + (i % 2) * 16;
+                    const c = v(Math.cos(a) * rr, 122 + (i % 3) * 32, Math.sin(a) * rr * 0.9);
+                    const [hu, hw] = frame(norm(v(Math.cos(a), 0.25, Math.sin(a))));
+                    const heart = [];
+                    for (let k = 0; k <= 46; k++) {
+                        const t = k / 46 * Math.PI * 2, s = 0.62;
+                        const hx = 16 * Math.pow(Math.sin(t), 3) * s;
+                        const hy = (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * s;
+                        heart.push(add(c, add(mul(hu, hx), mul(hw, hy))));
+                    }
+                    push(fill, heart, "#ff8fab", 1.3);
+                }
+
+                /* ribbon bow around the neck — drawn last, as the finishing touch */
+                const knotY = -136, knot = v(0, knotY, coneR(knotY) + 8);
+
+                // a band of ribbon right around the handle
+                const band = [];
+                for (let k = 0; k <= 48; k++) {
+                    const a = k / 48 * Math.PI * 2, r = coneR(knotY) * 1.02;
+                    band.push(v(Math.cos(a) * r, knotY + Math.sin(a * 2) * 3, Math.sin(a) * r * 0.95));
+                }
+                push(bow, band, "#eec25a", 1.6);
+
+                [-1, 1].forEach((sgn) => {
+                    // two fat loops, each with an inner crease line
+                    [1, 0.55].forEach((sc, li) => {
+                        const loop = [], tilt = sgn * 0.4;
+                        for (let k = 0; k <= 46; k++) {
+                            const t = k / 46 * Math.PI * 2;
+                            const lx = sgn * 40 * sc + 33 * sc * Math.cos(t), ly = 25 * sc * Math.sin(t);
+                            loop.push(v(knot.x + lx * Math.cos(tilt) - ly * Math.sin(tilt),
+                                knot.y + lx * Math.sin(tilt) + ly * Math.cos(tilt),
+                                knot.z + 11 * Math.sin(t) * sgn));
+                        }
+                        push(bow, loop, li ? "#eec25a" : "#f3c969", li ? 1.3 : 2.3);
+                    });
+
+                    const tail = [];
+                    for (let k = 0; k <= 24; k++) {
+                        tail.push(bez(knot, add(knot, v(sgn * 20, -34, 8)),
+                            add(knot, v(sgn * 54, -68, 14)), add(knot, v(sgn * 32, -112, 20)), k / 24));
+                    }
+                    push(bow, tail, "#eec25a", 1.9);
+                });
+
+                const kn = [];
+                for (let k = 0; k <= 26; k++) {
+                    const t = k / 26 * Math.PI * 2;
+                    kn.push(v(knot.x + 14 * Math.cos(t), knot.y + 11 * Math.sin(t), knot.z + 5));
+                }
+                push(bow, kn, "#e8b84f", 2.2);
+
+                strokes = wrap.concat(stems, heads, fill, bow);
+
+                totalLen = 0; cumLen = [];
+                strokes.forEach((s) => {
+                    let L = 0;
+                    for (let i = 1; i < s.pts.length; i++) {
+                        L += Math.hypot(s.pts[i].x - s.pts[i - 1].x, s.pts[i].y - s.pts[i - 1].y, s.pts[i].z - s.pts[i - 1].z);
+                    }
+                    s.len = L; cumLen.push(totalLen); totalLen += L;
+                });
+            }
+
+            /* ---------- camera ---------- */
+            function resize() {
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                W = overlay.clientWidth; H = overlay.clientHeight;
+                canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                viewScale = Math.max(0.4, Math.min(Math.min(W / 540, H / 620), 1.7));
+                ox = W / 2; oy = H / 2 - 34 * viewScale;
+                initBokeh();
+            }
+
+            function project(p) {
+                const cy = Math.cos(yaw), sy = Math.sin(yaw);
+                const x1 = p.x * cy + p.z * sy;
+                const z1 = -p.x * sy + p.z * cy;
+                const cp = Math.cos(pitch), sp = Math.sin(pitch);
+                const y2 = p.y * cp - z1 * sp;
+                const z2 = p.y * sp + z1 * cp;
+                const zz = z2 + 660;
+                const s = 660 / Math.max(zz, 90) * viewScale;
+                return { x: ox + x1 * s, y: oy - y2 * s, z: zz };
+            }
+
+            /* ---------- soft bokeh haze behind the drawing ---------- */
+            const bokeh = [];
+            function initBokeh() {
+                bokeh.length = 0;
+                for (let i = 0; i < 22; i++) {
+                    bokeh.push({
+                        x: Math.random(), y: Math.random(),
+                        r: (10 + Math.random() * 30) * viewScale,
+                        sp: 0.6 + Math.random() * 1.8, ph: Math.random() * 6.28,
+                        c: ["255,180,205", "243,201,105", "201,167,235"][i % 3]
+                    });
+                }
+            }
+
+            function drawBokeh(ts) {
+                for (const b of bokeh) {
+                    const y = (((b.y - ts * 0.0000075 * b.sp) % 1) + 1) % 1;
+                    const x = b.x + Math.sin(ts / 3200 + b.ph) * 0.018;
+                    const g = ctx.createRadialGradient(x * W, y * H, 0, x * W, y * H, b.r);
+                    g.addColorStop(0, "rgba(" + b.c + ",0.3)");
+                    g.addColorStop(1, "rgba(" + b.c + ",0)");
+                    ctx.fillStyle = g;
+                    ctx.beginPath(); ctx.arc(x * W, y * H, b.r, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+
+            /* ---------- painting ---------- */
+            function drawStroke(s, f) {
+                const pts = s.pts, n = pts.length;
+                const fi = f * (n - 1), last = Math.floor(fi);
+                const c = project(s.mid);
+                const depth = Math.max(0, Math.min(1, (900 - c.z) / 420));   // 1 = nearest
+                ctx.globalAlpha = 0.36 + depth * 0.64;
+                ctx.strokeStyle = s.color;
+                ctx.lineWidth = Math.max(0.6, s.w * (0.65 + depth * 0.85) * viewScale);
+                ctx.beginPath();
+                let q = project(pts[0]);
+                ctx.moveTo(q.x, q.y);
+                for (let i = 1; i <= last; i++) { q = project(pts[i]); ctx.lineTo(q.x, q.y); }
+                const frac = fi - last;
+                if (frac > 0 && last < n - 1) {
+                    const a = project(pts[last]), b = project(pts[last + 1]);
+                    q = { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
+                    ctx.lineTo(q.x, q.y);
+                }
+                ctx.stroke();
+                return q;
+            }
+
+            function drawPen(q) {
+                const r = 17 * viewScale;
+                ctx.globalAlpha = 1;
+                const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, r);
+                g.addColorStop(0, "rgba(255,255,255,0.95)");
+                g.addColorStop(0.35, "rgba(255,143,171,0.6)");
+                g.addColorStop(1, "rgba(255,143,171,0)");
+                ctx.fillStyle = g;
+                ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill();
+            }
+
+            function drawSparkles(ts) {
+                for (const sp of sparkles) {
+                    const q = project(sp.p);
+                    const a = 0.2 + 0.8 * Math.abs(Math.sin(ts / 620 + sp.ph));
+                    ctx.globalAlpha = a * 0.8;
+                    ctx.fillStyle = "#fff3c4";
+                    ctx.beginPath(); ctx.arc(q.x, q.y, sp.r * viewScale * (0.6 + a * 0.7), 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            const BQ_EMOJI = ["🌸", "💗", "✨", "🌹", "🦋", "🤍", "💫", "💐"];
+            function spawnEmoji() {
+                emojiLayer.innerHTML = "";
+                for (let i = 0; i < 10; i++) {
+                    const s = document.createElement("span");
+                    s.textContent = BQ_EMOJI[i % BQ_EMOJI.length];
+                    s.style.left = (5 + Math.random() * 90) + "%";
+                    s.style.fontSize = (18 + Math.random() * 22) + "px";
+                    s.style.animationDuration = (12 + Math.random() * 9) + "s";
+                    s.style.animationDelay = (-Math.random() * 12) + "s";
+                    emojiLayer.appendChild(s);
+                }
+            }
+
+            function complete() {
+                finished = true;
+                spawnEmoji();
+                capEl.classList.add("show");
+                hintEl.classList.add("show");
+                replayBtn.classList.add("show");
+                sparkles = [];
+                for (let i = 0; i < 42; i++) {
+                    const s = strokes[Math.floor(Math.random() * strokes.length)];
+                    sparkles.push({
+                        p: s.pts[Math.floor(Math.random() * s.pts.length)],
+                        ph: Math.random() * Math.PI * 2,
+                        r: 1.2 + Math.random() * 2
+                    });
+                }
+                if (window.confetti) {
+                    confetti({
+                        particleCount: 90, spread: 95, origin: { y: 0.6 }, scalar: 0.9,
+                        colors: ["#ff8fab", "#e8577e", "#f3c969", "#c9a7eb", "#ffd3e0"]
+                    });
+                }
+            }
+
+            function tick(ts) {
+                if (!t0) t0 = ts;
+                const p = Math.min((ts - t0) / DRAW_MS, 1);
+                if (!dragging) yaw += finished ? 0.0022 : 0.0011;
+
+                ctx.clearRect(0, 0, W, H);
+                drawBokeh(ts);
+                ctx.lineCap = "round"; ctx.lineJoin = "round";
+
+                const target = p * totalLen;
+                let head = null;
+                for (let i = 0; i < strokes.length; i++) {
+                    if (cumLen[i] >= target) break;
+                    const s = strokes[i];
+                    const f = Math.min((target - cumLen[i]) / (s.len || 1), 1);
+                    const end = drawStroke(s, f);
+                    if (f < 1) head = end;
+                }
+                if (head) drawPen(head);
+                if (sparkles.length) drawSparkles(ts);
+                ctx.globalAlpha = 1;
+
+                if (p >= 1 && !finished) complete();
+                raf = requestAnimationFrame(tick);
+            }
+
+            /* ---------- open / close ---------- */
+            function start() {
+                capEl.classList.remove("show");
+                hintEl.classList.remove("show");
+                replayBtn.classList.remove("show");
+                emojiLayer.innerHTML = "";
+                sparkles = []; finished = false; t0 = 0; yaw = -0.5; pitch = -0.12;
+                if (!strokes.length) build();
+                resize();
+                cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(tick);
+            }
+
+            function openBouquet() {
+                overlay.classList.add("open");
+                document.body.style.overflow = "hidden";
+                start();
+            }
+
+            function closeBouquet() {
+                overlay.classList.remove("open");
+                document.body.style.overflow = "";
+                cancelAnimationFrame(raf); raf = 0;
+            }
+
+            document.getElementById("bouquetBtn").addEventListener("click", openBouquet);
+            document.getElementById("bouquetClose").addEventListener("click", closeBouquet);
+            replayBtn.addEventListener("click", start);
+
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "Escape" && overlay.classList.contains("open")) closeBouquet();
+            });
+
+            window.addEventListener("resize", () => { if (overlay.classList.contains("open")) resize(); });
+
+            canvas.addEventListener("pointerdown", (e) => {
+                dragging = true; lastPt = { x: e.clientX, y: e.clientY };
+                canvas.setPointerCapture(e.pointerId);
+            });
+            canvas.addEventListener("pointermove", (e) => {
+                if (!dragging) return;
+                yaw += (e.clientX - lastPt.x) * 0.006;
+                pitch = Math.max(-0.85, Math.min(0.5, pitch + (e.clientY - lastPt.y) * 0.004));
+                lastPt = { x: e.clientX, y: e.clientY };
+            });
+            ["pointerup", "pointercancel"].forEach((ev) =>
+                canvas.addEventListener(ev, () => { dragging = false; }));
+        })();
 
         /* ================= toast ================= */
         let toastTimer;
